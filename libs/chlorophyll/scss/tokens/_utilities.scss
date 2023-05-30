@@ -616,6 +616,10 @@ $utilities: map-merge(
         invisible: hidden,
       ),
     ),
+    'position': (
+      property: position,
+      values: relative absolute fixed static,
+    ),
   ),
   $utilities
 );

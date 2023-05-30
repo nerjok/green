@@ -2,11 +2,12 @@ import {
   AfterViewInit,
   Directive,
   ElementRef,
+  HostListener,
   InjectionToken,
   OnDestroy,
 } from '@angular/core'
-import { Subject, fromEvent, interval } from 'rxjs'
-import { takeUntil, throttle } from 'rxjs/operators'
+import { Subject, fromEvent } from 'rxjs'
+import { takeUntil, throttleTime } from 'rxjs/operators'
 
 export const ON_SCROLL_TOKEN = new InjectionToken<string>('ON_SCROLL_TOKEN')
 
@@ -25,14 +26,25 @@ export class NggOnScrollDirective implements AfterViewInit, OnDestroy {
   onScroll$ = new Subject()
   destroy$ = new Subject()
 
-  constructor(private elementRef: ElementRef) {}
+  scrollDocument$ = new Subject();
+
+  scrollSubscription = this.scrollDocument$
+    .pipe(throttleTime(1000), takeUntil(this.destroy$))
+    .subscribe(this.onScroll$);
+
+  @HostListener('window:scroll', ['$event'])
+  public onDocumentScroll(): void {
+    this.scrollDocument$.next({});
+  }
+
+  constructor(private elementRef: ElementRef<HTMLElement>) {}
 
   public ngAfterViewInit(): void {
     if (this.elementRef) {
       fromEvent(this.elementRef?.nativeElement, 'scroll')
         .pipe(
           takeUntil(this.destroy$),
-          throttle(() => interval(30))
+          throttleTime(1000)
         )
         .subscribe(() => {
           this.onScroll$.next()

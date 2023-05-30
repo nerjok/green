@@ -1,5 +1,6 @@
 import {
   AfterViewInit,
+  ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
   ElementRef,
@@ -18,25 +19,32 @@ import { DropdownOption } from '@sebgroup/extract'
 import { Subject, Subscription } from 'rxjs'
 import { ON_SCROLL_TOKEN } from '../shared/on-scroll.directive'
 
+export enum PositionTypes {
+  Fixed = 'fixed',
+  Absolute = 'absolute'
+} 
 @Component({
   selector: 'ngg-context-menu',
   templateUrl: './context-menu.component.html',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  styles: [':host { position: relative; }'],
 })
 export class NggContextMenuComponent
   implements AfterViewInit, OnDestroy, OnInit
 {
   @Input() direction: 'ltr' | 'rtl' = 'ltr'
   @Input() menuItems: DropdownOption[] = []
-  @Input() menuItemTemplate: TemplateRef<unknown> | null = null
-  @Input() menuAnchorTemplate: TemplateRef<unknown> | null = null
+  @Input() menuItemTemplate?: TemplateRef<unknown>
+  @Input() menuAnchorTemplate?: TemplateRef<unknown>
   @Input() closeOnScroll = false
+  @Input() position: PositionTypes = PositionTypes.Absolute
 
   @Output() contextMenuItemClicked: EventEmitter<DropdownOption> =
     new EventEmitter<DropdownOption>()
 
-  @ViewChild('contextMenuPopover') popover: ElementRef | undefined
+  @ViewChild('contextMenuPopover') popover!: ElementRef<HTMLElement>
 
-  @ViewChild('contextMenuAnchor') anchor: ElementRef | undefined
+  @ViewChild('contextMenuAnchor') anchor!: ElementRef<HTMLElement>
 
   isActive = false
   top = '0px'
@@ -45,9 +53,13 @@ export class NggContextMenuComponent
   resizeObserver?: ResizeObserver
   menuCloseSubscription?: Subscription
 
+  get isFixed(): boolean {
+    return this.position === PositionTypes.Fixed
+  }
+
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
-    private elementRef: ElementRef,
+    private elementRef: ElementRef<HTMLElement>,
     @Optional()
     @Inject(ON_SCROLL_TOKEN)
     public closeContextMenu: Subject<void>
@@ -55,13 +67,13 @@ export class NggContextMenuComponent
 
   @HostListener('document:click', ['$event.target'])
   onDocumentClick(target: HTMLElement): void {
-    if (!this.isActive) {
-      return
-    }
-    const contextMenuElement = this.elementRef.nativeElement as HTMLElement
+    console.log('[[ clickoutside ]]', this.isActive);
+    if (this.isActive) {
+      const contextMenuElement = this.elementRef.nativeElement
 
-    if (!contextMenuElement.contains(target)) {
-      this.close()
+      if (!contextMenuElement.contains(target)) {
+        this.close()
+      }
     }
   }
 
@@ -91,16 +103,25 @@ export class NggContextMenuComponent
       return
     }
 
-    const anchor = this.anchor?.nativeElement as HTMLElement
+    const anchor = this.anchor?.nativeElement
     const buttonRect = anchor.getBoundingClientRect()
-
+    
     const left = this.calculateLeft(this.direction, buttonRect)
-    const top = this.calculateTop(buttonRect.bottom)
+    const top = this.position === PositionTypes.Fixed ? buttonRect.bottom : anchor.clientHeight;
     const gapBetweenButtonAndPopover = 3
 
     this.left = `${left}px`
     this.top = `${top + gapBetweenButtonAndPopover}px`
     this.isActive = true
+    console.log(
+      anchor.getClientRects(),
+      '[ sizesss ]',
+      left,
+      top,
+      '[[ anchoreSizes ]]',
+      anchor.getBoundingClientRect()
+    )
+    this.changeDetectorRef.detectChanges()
   }
 
   close(): void {
@@ -125,14 +146,40 @@ export class NggContextMenuComponent
     }
   }
 
-  calculateTop(buttonRectBottom: number): number {
-    return buttonRectBottom + window.pageYOffset
-  }
-
   calculateLeft(direction: string, buttonRect: DOMRect): number {
-    const popover = this.popover?.nativeElement as HTMLElement
+    const popover = this.popover?.nativeElement
     const popoverWidth = popover?.offsetWidth || 0
 
+    // if (this.position === 'absolute') {
+    //   if(direction === 'rtl') {
+    //     const elementWidth = buttonRect.width;
+    //     if(elementWidth <= buttonRect.left) {
+    //       return -popoverWidth+elementWidth;
+    //     } else {
+    //       return 0;
+    //     }
+    //   } else {
+    //     const elementWidth = buttonRect.width;
+    //     if(buttonRect.right + popoverWidth <= window.innerWidth) {
+    //       return 0;
+    //     } else {
+    //       return -popoverWidth+elementWidth;
+    //     }
+    //   }
+    // }
+
+    if (this.position === 'absolute') {
+      const elementWidth = this.anchor?.nativeElement.offsetWidth;
+      // buttonRect.width;
+      const elementRight = buttonRect.right;
+      const windowWidth = window.innerWidth;
+      const rtlDirection = direction === 'rtl';
+    
+      if ((rtlDirection && elementWidth <= buttonRect.left) || (!rtlDirection && elementRight + popoverWidth > windowWidth)) {
+        return -popoverWidth + elementWidth;
+      }
+      return 0;
+    }
     switch (direction) {
       case 'rtl':
         return popoverWidth <= buttonRect.left
